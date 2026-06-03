@@ -109,6 +109,7 @@ function exportGLB() {
     if (!m.visible) continue;
     const clone = m.clone();
     const ol = clone.getObjectByName('_outline'); if (ol) clone.remove(ol);
+    const cs = clone.getObjectByName('_contact_shadow'); if (cs) clone.remove(cs);
     exportScene.add(clone);
   }
   const exporter = new GLTFExporter();

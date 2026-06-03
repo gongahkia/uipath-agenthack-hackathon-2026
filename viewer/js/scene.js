@@ -26,6 +26,7 @@ const THEMES = {
 let floorMesh = null;
 let ambientLight = null;
 let hemisphereLight = null;
+let contactShadowTexture = null;
 
 export function createSceneMaterial(kind, color, options = {}) {
   const base = new THREE.Color(color ?? 0x888888);
@@ -70,7 +71,56 @@ export function prepareMeshForScene(mesh, kind, color, options = {}) {
 
   mesh.castShadow = true;
   mesh.receiveShadow = true;
+  if (kind !== 'ghost' && options.contactShadow !== false) addContactShadow(mesh, kind);
   return mesh;
+}
+
+function getContactShadowTexture() {
+  if (contactShadowTexture) return contactShadowTexture;
+  const canvas = document.createElement('canvas');
+  canvas.width = 96;
+  canvas.height = 96;
+  const ctx = canvas.getContext('2d');
+  const gradient = ctx.createRadialGradient(48, 48, 4, 48, 48, 48);
+  gradient.addColorStop(0, 'rgba(0,0,0,0.38)');
+  gradient.addColorStop(0.45, 'rgba(0,0,0,0.18)');
+  gradient.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 96, 96);
+  contactShadowTexture = new THREE.CanvasTexture(canvas);
+  contactShadowTexture.colorSpace = THREE.SRGBColorSpace;
+  return contactShadowTexture;
+}
+
+function meshLocalSize(mesh) {
+  const params = mesh.geometry?.parameters;
+  if (params?.width && params?.height && params?.depth) {
+    return new THREE.Vector3(params.width, params.height, params.depth);
+  }
+  mesh.geometry?.computeBoundingBox?.();
+  const box = mesh.geometry?.boundingBox;
+  return box ? box.getSize(new THREE.Vector3()) : new THREE.Vector3(1, 1, 1);
+}
+
+function addContactShadow(mesh, kind) {
+  if (mesh.getObjectByName('_contact_shadow')) return;
+  const size = meshLocalSize(mesh);
+  if (size.x < 0.04 || size.z < 0.04) return;
+  const shadow = new THREE.Mesh(
+    new THREE.PlaneGeometry(size.x * 1.35, size.z * 1.35),
+    new THREE.MeshBasicMaterial({
+      map: getContactShadowTexture(),
+      transparent: true,
+      opacity: kind === 'wall' || kind === 'model' ? 0.18 : 0.24,
+      depthWrite: false,
+    })
+  );
+  shadow.name = '_contact_shadow';
+  shadow.rotation.x = -Math.PI / 2;
+  shadow.position.y = -size.y / 2 + 0.006;
+  shadow.renderOrder = -2;
+  shadow.raycast = () => {};
+  mesh.add(shadow);
 }
 
 function applySceneTheme(light) {
